@@ -40,12 +40,15 @@ class InvoicePDF:
         self.width, self.height = A4
         self.margin = 0.75 * inch
         
-        # Color scheme
-        self.color_primary = colors.HexColor('#2C3E50')
-        self.color_secondary = colors.HexColor('#3498DB')
-        self.color_accent = colors.HexColor('#E74C3C')
-        self.color_light_gray = colors.HexColor('#ECF0F1')
-        self.color_dark_gray = colors.HexColor('#7F8C8D')
+        # Enhanced color scheme - Modern gradient-inspired palette
+        self.color_primary = colors.HexColor('#1a1f36')  # Deep navy
+        self.color_secondary = colors.HexColor('#6366f1')  # Vibrant indigo
+        self.color_accent = colors.HexColor('#ec4899')  # Pink accent
+        self.color_success = colors.HexColor('#10b981')  # Green for total
+        self.color_light_gray = colors.HexColor('#f3f4f6')  # Very light gray
+        self.color_medium_gray = colors.HexColor('#e5e7eb')  # Medium gray
+        self.color_dark_gray = colors.HexColor('#6b7280')  # Muted gray
+        self.color_text = colors.HexColor('#111827')  # Near black for text
         
         # Styles
         self.styles = getSampleStyleSheet()
@@ -53,53 +56,78 @@ class InvoicePDF:
     
     def _create_custom_styles(self):
         """Create custom paragraph styles."""
-        # Company name style
+        # Company name style - larger and bolder
         self.styles.add(ParagraphStyle(
             name='CompanyName',
             parent=self.styles['Heading1'],
-            fontSize=18,
+            fontSize=22,
             textColor=self.color_primary,
-            spaceAfter=6,
-            fontName='Helvetica-Bold'
+            spaceAfter=8,
+            fontName='Helvetica-Bold',
+            leading=26
         ))
         
-        # Invoice title style
+        # Invoice title style - more prominent
         self.styles.add(ParagraphStyle(
             name='InvoiceTitle',
             parent=self.styles['Heading1'],
-            fontSize=24,
+            fontSize=32,
             textColor=self.color_secondary,
             spaceAfter=12,
             alignment=TA_RIGHT,
-            fontName='Helvetica-Bold'
+            fontName='Helvetica-Bold',
+            leading=36
         ))
         
-        # Section heading style
+        # Section heading style with color
         self.styles.add(ParagraphStyle(
             name='SectionHeading',
             parent=self.styles['Heading2'],
-            fontSize=11,
-            textColor=self.color_primary,
-            spaceAfter=6,
-            fontName='Helvetica-Bold'
+            fontSize=12,
+            textColor=self.color_secondary,
+            spaceAfter=8,
+            fontName='Helvetica-Bold',
+            leading=14
         ))
         
-        # Normal text style
+        # Normal text style - improved readability
         self.styles.add(ParagraphStyle(
             name='InvoiceText',
             parent=self.styles['Normal'],
-            fontSize=9,
-            textColor=colors.black,
-            spaceAfter=3
+            fontSize=10,
+            textColor=self.color_text,
+            spaceAfter=4,
+            leading=14
         ))
         
         # Small text style (footer)
         self.styles.add(ParagraphStyle(
             name='SmallText',
             parent=self.styles['Normal'],
-            fontSize=8,
+            fontSize=9,
             textColor=self.color_dark_gray,
-            alignment=TA_CENTER
+            alignment=TA_CENTER,
+            leading=12
+        ))
+        
+        # Metadata style for invoice details
+        self.styles.add(ParagraphStyle(
+            name='MetadataLabel',
+            parent=self.styles['Normal'],
+            fontSize=9,
+            textColor=self.color_dark_gray,
+            spaceAfter=3,
+            alignment=TA_RIGHT
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='MetadataValue',
+            parent=self.styles['Normal'],
+            fontSize=10,
+            textColor=self.color_text,
+            spaceAfter=3,
+            alignment=TA_RIGHT,
+            fontName='Helvetica-Bold'
         ))
     
     def _process_logo(self, logo_path: str, max_width: float = 150) -> Optional[Image]:
@@ -177,9 +205,13 @@ class InvoicePDF:
             # Build content
             story = []
             
+            # Add decorative top border
+            story.extend(self._build_decorative_header())
+            story.append(Spacer(1, 0.2 * inch))
+            
             # Header section
             story.extend(self._build_header(company_data, invoice_data))
-            story.append(Spacer(1, 0.3 * inch))
+            story.append(Spacer(1, 0.4 * inch))
             
             # Billing section
             story.extend(self._build_billing_section(invoice_data))
@@ -210,6 +242,21 @@ class InvoicePDF:
         except Exception as e:
             print(f"Error generating PDF: {e}")
             return False
+    
+    def _build_decorative_header(self) -> List:
+        """Build a decorative header bar."""
+        elements = []
+        
+        # Create a colored bar at the top
+        bar_table = Table([['']], colWidths=[7 * inch])
+        bar_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), self.color_secondary),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(bar_table)
+        
+        return elements
     
     def _build_header(self, company_data: Dict, invoice_data: Dict) -> List:
         """Build the header section with logo, company info, and invoice metadata."""
@@ -254,22 +301,27 @@ class InvoicePDF:
         invoice_title = Paragraph("<b>INVOICE</b>", self.styles['InvoiceTitle'])
         right_content.append(invoice_title)
         
+        # Styled metadata with labels
         order_num = Paragraph(
-            f"<b>Order #:</b> {invoice_data['order_number']}",
-            self.styles['InvoiceText']
+            f"<font color='#{self.color_dark_gray.hexval()[2:]}'><b>ORDER #</b></font><br/>"
+            f"<font size='11'><b>{invoice_data['order_number']}</b></font>",
+            self.styles['MetadataValue']
         )
         right_content.append(order_num)
         
         date_formatted = utils.format_date_display(invoice_data['invoice_date'])
         invoice_date = Paragraph(
-            f"<b>Date:</b> {date_formatted}",
-            self.styles['InvoiceText']
+            f"<font color='#{self.color_dark_gray.hexval()[2:]}'><b>DATE</b></font><br/>"
+            f"<font size='11'><b>{date_formatted}</b></font>",
+            self.styles['MetadataValue']
         )
         right_content.append(invoice_date)
         
+        currency_name = utils.get_currency_name(invoice_data['currency'])
         currency = Paragraph(
-            f"<b>Currency:</b> {invoice_data['currency']}",
-            self.styles['InvoiceText']
+            f"<font color='#{self.color_dark_gray.hexval()[2:]}'><b>CURRENCY</b></font><br/>"
+            f"<font size='11'><b>{invoice_data['currency']}</b></font>",
+            self.styles['MetadataValue']
         )
         right_content.append(currency)
         
@@ -300,31 +352,51 @@ class InvoicePDF:
         return elements
     
     def _build_billing_section(self, invoice_data: Dict) -> List:
-        """Build the billing information section."""
+        """Build the billing information section with styled box."""
         elements = []
         
+        # Create a styled box for billing info
+        billing_content = []
+        
         # Section heading
-        heading = Paragraph("<b>BILL TO:</b>", self.styles['SectionHeading'])
-        elements.append(heading)
+        heading = Paragraph(
+            "<b>BILL TO</b>",
+            self.styles['SectionHeading']
+        )
+        billing_content.append([heading])
         
         # Billing details
         billing_name = Paragraph(
-            f"<b>{invoice_data['billing_name']}</b>",
+            f"<b><font size='11'>{invoice_data['billing_name']}</font></b>",
             self.styles['InvoiceText']
         )
-        elements.append(billing_name)
+        billing_content.append([billing_name])
         
         billing_address = Paragraph(
             invoice_data['billing_address'].replace('\n', '<br/>'),
             self.styles['InvoiceText']
         )
-        elements.append(billing_address)
+        billing_content.append([billing_address])
         
         billing_phone = Paragraph(
-            f"Phone: {invoice_data['billing_phone']}",
+            f"<b>Phone:</b> {invoice_data['billing_phone']}",
             self.styles['InvoiceText']
         )
-        elements.append(billing_phone)
+        billing_content.append([billing_phone])
+        
+        # Create table with background
+        billing_table = Table(billing_content, colWidths=[4 * inch])
+        billing_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), self.color_light_gray),
+            ('LEFTPADDING', (0, 0), (-1, -1), 15),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 15),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOX', (0, 0), (-1, -1), 1, self.color_medium_gray),
+        ]))
+        
+        elements.append(billing_table)
         
         return elements
     
@@ -358,33 +430,37 @@ class InvoicePDF:
         
         items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
         
-        # Style the table
+        # Enhanced table styling with gradient-like effect
         table_style = [
-            # Header row
-            ('BACKGROUND', (0, 0), (-1, 0), self.color_primary),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            # Header row - bold and colored
+            ('BACKGROUND', (0, 0), (-1, 0), self.color_secondary),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 14),
+            ('TOPPADDING', (0, 0), (-1, 0), 14),
             
             # Data rows
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('ALIGN', (0, 1), (0, -1), 'CENTER'),  # # column
             ('ALIGN', (1, 1), (1, -1), 'LEFT'),    # Description
             ('ALIGN', (2, 1), (2, -1), 'CENTER'),  # Qty
             ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),  # Prices
+            ('TEXTCOLOR', (0, 1), (-1, -1), self.color_text),
             
             # Grid and padding
-            ('GRID', (0, 0), (-1, -1), 0.5, self.color_dark_gray),
-            ('TOPPADDING', (0, 1), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('LINEBELOW', (0, 0), (-1, 0), 2, self.color_secondary),
+            ('INNERGRID', (0, 1), (-1, -1), 0.5, self.color_medium_gray),
+            ('BOX', (0, 0), (-1, -1), 1.5, self.color_secondary),
+            ('TOPPADDING', (0, 1), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
         ]
         
-        # Alternating row colors
+        # Alternating row colors with better contrast
         for i in range(1, len(table_data)):
             if i % 2 == 0:
                 table_style.append(
@@ -436,19 +512,20 @@ class InvoicePDF:
                 )
             ])
         
-        # Grand Total
+        # Grand Total - styled with green accent
         totals_data.append([
-            Paragraph('<b>GRAND TOTAL:</b>', self.styles['SectionHeading']),
+            Paragraph('<b><font size="12">TOTAL DUE:</font></b>', self.styles['SectionHeading']),
             Paragraph(
-                f"<b>{utils.format_currency(totals['total'], currency)}</b>",
+                f"<b><font size='13' color='#{self.color_success.hexval()[2:]}'>"
+                f"{utils.format_currency(totals['total'], currency)}</font></b>",
                 self.styles['SectionHeading']
             )
         ])
         
-        # Create table
+        # Create table with enhanced styling
         totals_table = Table(
             totals_data,
-            colWidths=[1.5 * inch, 1.2 * inch],
+            colWidths=[1.7 * inch, 1.3 * inch],
             hAlign='RIGHT'
         )
         
@@ -456,12 +533,13 @@ class InvoicePDF:
             ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
             ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -2), 9),
-            ('FONTSIZE', (0, -1), (-1, -1), 11),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-            ('LINEABOVE', (0, -1), (-1, -1), 2, self.color_primary),
+            ('FONTSIZE', (0, 0), (-1, -2), 10),
+            ('FONTSIZE', (0, -1), (-1, -1), 13),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LINEABOVE', (0, -1), (-1, -1), 2.5, self.color_success),
             ('BACKGROUND', (0, -1), (-1, -1), self.color_light_gray),
+            ('BOX', (0, -1), (-1, -1), 1.5, self.color_success),
         ]))
         
         elements.append(totals_table)
@@ -469,11 +547,22 @@ class InvoicePDF:
         return elements
     
     def _build_footer(self) -> List:
-        """Build the footer with thank you message."""
+        """Build the footer with thank you message and decorative element."""
         elements = []
         
+        # Horizontal line
+        line_table = Table([['']], colWidths=[7 * inch])
+        line_table.setStyle(TableStyle([
+            ('LINEABOVE', (0, 0), (-1, -1), 1, self.color_medium_gray),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(line_table)
+        elements.append(Spacer(1, 0.15 * inch))
+        
         footer_text = Paragraph(
-            "<i>Thank you for your business!</i>",
+            "<b><i>Thank you for your business!</i></b><br/>"
+            "<font size='8'>We appreciate your trust and look forward to serving you again.</font>",
             self.styles['SmallText']
         )
         elements.append(footer_text)

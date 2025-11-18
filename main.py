@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 import subprocess
 import platform
+import os
 
 # Import local modules
 import db
@@ -628,17 +629,182 @@ class InvoiceGeneratorApp:
                 "PDF generated but failed to save invoice record to database"
             )
         
-        # Show success message
-        message = (
-            f"Invoice generated successfully!\n\n"
-            f"Order Number: {invoice_data['order_number']}\n"
-            f"Total: {utils.format_currency(totals['total'], invoice_data['currency'])}\n"
-            f"Saved to: {pdf_path}"
+        # Show success message with print option
+        self.show_success_dialog(
+            invoice_data['order_number'],
+            totals['total'],
+            invoice_data['currency'],
+            pdf_path
         )
-        messagebox.showinfo("Success", message)
         
         # Clear form for next invoice
         self.clear_invoice_form()
+    
+    def show_success_dialog(self, order_number: str, total: float, currency: str, pdf_path: Path):
+        """
+        Show success dialog with options to print or open the invoice.
+        
+        Args:
+            order_number: Invoice order number
+            total: Total amount
+            currency: Currency code
+            pdf_path: Path to the generated PDF
+        """
+        # Create custom dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Invoice Generated Successfully")
+        dialog.geometry("450x300")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Success icon and message
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Success message
+        success_label = tk.Label(
+            main_frame,
+            text="✓ Invoice Generated Successfully!",
+            font=("Helvetica", 16, "bold"),
+            fg="#10b981"
+        )
+        success_label.pack(pady=(0, 20))
+        
+        # Invoice details
+        details_frame = ttk.Frame(main_frame)
+        details_frame.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(
+            details_frame,
+            text=f"Order Number:",
+            font=("Helvetica", 10, "bold")
+        ).grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(
+            details_frame,
+            text=order_number,
+            font=("Helvetica", 10)
+        ).grid(row=0, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+        
+        ttk.Label(
+            details_frame,
+            text=f"Total Amount:",
+            font=("Helvetica", 10, "bold")
+        ).grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(
+            details_frame,
+            text=utils.format_currency(total, currency),
+            font=("Helvetica", 10)
+        ).grid(row=1, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+        
+        ttk.Label(
+            details_frame,
+            text=f"Saved to:",
+            font=("Helvetica", 10, "bold")
+        ).grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(
+            details_frame,
+            text=str(pdf_path.name),
+            font=("Helvetica", 9)
+        ).grid(row=2, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+        
+        # Buttons frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=20)
+        
+        def print_invoice():
+            """Print the generated invoice PDF."""
+            success = self.print_pdf(pdf_path)
+            if success:
+                messagebox.showinfo("Print", "Invoice sent to printer!", parent=dialog)
+            else:
+                messagebox.showerror("Print Error", "Failed to send invoice to printer.", parent=dialog)
+        
+        def open_invoice():
+            """Open the PDF file."""
+            self.open_pdf_file(pdf_path)
+            dialog.destroy()
+        
+        # Print button (primary action)
+        print_btn = ttk.Button(
+            button_frame,
+            text="🖨 Print Invoice",
+            command=print_invoice,
+            width=20
+        )
+        print_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Open button
+        open_btn = ttk.Button(
+            button_frame,
+            text="📄 Open PDF",
+            command=open_invoice,
+            width=20
+        )
+        open_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Close button
+        close_btn = ttk.Button(
+            button_frame,
+            text="Close",
+            command=dialog.destroy,
+            width=15
+        )
+        close_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Make print button default (activated by Enter key)
+        dialog.bind('<Return>', lambda e: print_invoice())
+        print_btn.focus_set()
+    
+    def print_pdf(self, pdf_path: Path) -> bool:
+        """
+        Send PDF to the default printer.
+        
+        Args:
+            pdf_path: Path to the PDF file to print
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            system = platform.system()
+            
+            if system == 'Darwin':  # macOS
+                subprocess.run(['lpr', str(pdf_path)], check=True)
+            elif system == 'Windows':
+                # Use default PDF reader to print
+                os.startfile(str(pdf_path), 'print')
+            else:  # Linux
+                subprocess.run(['lpr', str(pdf_path)], check=True)
+            
+            return True
+        except Exception as e:
+            print(f"Error printing PDF: {e}")
+            return False
+    
+    def open_pdf_file(self, pdf_path: Path):
+        """
+        Open PDF file with the default application.
+        
+        Args:
+            pdf_path: Path to the PDF file
+        """
+        try:
+            system = platform.system()
+            
+            if system == 'Darwin':  # macOS
+                subprocess.run(['open', str(pdf_path)])
+            elif system == 'Windows':
+                os.startfile(str(pdf_path))
+            else:  # Linux
+                subprocess.run(['xdg-open', str(pdf_path)])
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open PDF: {e}")
     
     def clear_invoice_form(self):
         """Clear the invoice form for a new invoice."""
