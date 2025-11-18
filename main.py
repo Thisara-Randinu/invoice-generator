@@ -1,0 +1,880 @@
+"""
+Main GUI Application for Invoice Generator.
+
+Cross-platform Tkinter-based invoice generator with:
+- First-time company setup wizard
+- Invoice creation form with dynamic line items
+- Settings panel for updating company info and preferences
+- PDF generation and management
+- SQLite database for persistent storage
+
+Supports Windows and macOS with proper file path handling via pathlib.
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog, scrolledtext
+from pathlib import Path
+from datetime import datetime
+from typing import List, Dict, Optional
+import subprocess
+import platform
+
+# Import local modules
+import db
+import utils
+import pdf_generator
+
+
+class InvoiceGeneratorApp:
+    """Main application class for the Invoice Generator."""
+    
+    def __init__(self, root: tk.Tk):
+        """
+        Initialize the application.
+        
+        Args:
+            root: Tkinter root window
+        """
+        self.root = root
+        self.root.title("Invoice Generator")
+        self.root.geometry("900x700")
+        
+        # Initialize database
+        self.db = db.Database()
+        
+        # Line items storage
+        self.line_items = []
+        
+        # Check if first run
+        if self.db.is_first_run():
+            self.show_company_setup()
+        else:
+            self.load_company_settings()
+            self.create_main_window()
+    
+    def load_company_settings(self):
+        """Load company settings from database."""
+        self.company_settings = self.db.get_company_settings()
+        if not self.company_settings:
+            messagebox.showerror("Error", "Failed to load company settings")
+            self.root.quit()
+    
+    def show_company_setup(self):
+        """Display the first-time company setup wizard."""
+        setup_window = tk.Toplevel(self.root)
+        setup_window.title("Company Setup - First Time Configuration")
+        setup_window.geometry("600x550")
+        setup_window.transient(self.root)
+        setup_window.grab_set()
+        
+        # Make it non-closable via X button
+        setup_window.protocol("WM_DELETE_WINDOW", lambda: None)
+        
+        # Title
+        title_label = tk.Label(
+            setup_window,
+            text="Welcome to Invoice Generator!",
+            font=("Helvetica", 16, "bold")
+        )
+        title_label.pack(pady=20)
+        
+        subtitle_label = tk.Label(
+            setup_window,
+            text="Please enter your company information to get started.",
+            font=("Helvetica", 10)
+        )
+        subtitle_label.pack(pady=5)
+        
+        # Form frame
+        form_frame = ttk.Frame(setup_window, padding="20")
+        form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Company Name
+        ttk.Label(form_frame, text="Company Name:*").grid(
+            row=0, column=0, sticky=tk.W, pady=5
+        )
+        company_name_entry = ttk.Entry(form_frame, width=40)
+        company_name_entry.grid(row=0, column=1, pady=5, padx=5)
+        
+        # Company Address
+        ttk.Label(form_frame, text="Company Address:*").grid(
+            row=1, column=0, sticky=tk.NW, pady=5
+        )
+        company_address_text = tk.Text(form_frame, width=40, height=4)
+        company_address_text.grid(row=1, column=1, pady=5, padx=5)
+        
+        # Company Phone
+        ttk.Label(form_frame, text="Company Phone:*").grid(
+            row=2, column=0, sticky=tk.W, pady=5
+        )
+        company_phone_entry = ttk.Entry(form_frame, width=40)
+        company_phone_entry.grid(row=2, column=1, pady=5, padx=5)
+        
+        # Default Currency
+        ttk.Label(form_frame, text="Default Currency:*").grid(
+            row=3, column=0, sticky=tk.W, pady=5
+        )
+        currency_var = tk.StringVar(value="USD")
+        currency_combo = ttk.Combobox(
+            form_frame,
+            textvariable=currency_var,
+            values=utils.get_available_currencies(),
+            state="readonly",
+            width=37
+        )
+        currency_combo.grid(row=3, column=1, pady=5, padx=5)
+        
+        # Logo Path
+        ttk.Label(form_frame, text="Company Logo:").grid(
+            row=4, column=0, sticky=tk.W, pady=5
+        )
+        logo_path_var = tk.StringVar(value="")
+        logo_frame = ttk.Frame(form_frame)
+        logo_frame.grid(row=4, column=1, pady=5, padx=5, sticky=tk.W)
+        
+        logo_entry = ttk.Entry(logo_frame, textvariable=logo_path_var, width=30)
+        logo_entry.pack(side=tk.LEFT)
+        
+        def choose_logo():
+            filename = filedialog.askopenfilename(
+                title="Select Company Logo",
+                filetypes=[
+                    ("Image Files", "*.png *.jpg *.jpeg"),
+                    ("All Files", "*.*")
+                ]
+            )
+            if filename:
+                logo_path_var.set(filename)
+        
+        ttk.Button(logo_frame, text="Browse...", command=choose_logo).pack(
+            side=tk.LEFT, padx=5
+        )
+        
+        # Output Folder
+        ttk.Label(form_frame, text="Invoice Output Folder:*").grid(
+            row=5, column=0, sticky=tk.W, pady=5
+        )
+        output_path_var = tk.StringVar(value=str(Path.home() / "Documents" / "Invoices"))
+        output_frame = ttk.Frame(form_frame)
+        output_frame.grid(row=5, column=1, pady=5, padx=5, sticky=tk.W)
+        
+        output_entry = ttk.Entry(output_frame, textvariable=output_path_var, width=30)
+        output_entry.pack(side=tk.LEFT)
+        
+        def choose_output_folder():
+            folder = filedialog.askdirectory(title="Select Output Folder")
+            if folder:
+                output_path_var.set(folder)
+        
+        ttk.Button(output_frame, text="Browse...", command=choose_output_folder).pack(
+            side=tk.LEFT, padx=5
+        )
+        
+        # Save button
+        def save_setup():
+            # Validate inputs
+            name = company_name_entry.get().strip()
+            address = company_address_text.get("1.0", tk.END).strip()
+            phone = company_phone_entry.get().strip()
+            currency = currency_var.get()
+            logo = logo_path_var.get().strip()
+            output = output_path_var.get().strip()
+            
+            if not name:
+                messagebox.showerror("Validation Error", "Company name is required")
+                return
+            
+            if not address:
+                messagebox.showerror("Validation Error", "Company address is required")
+                return
+            
+            if not phone:
+                messagebox.showerror("Validation Error", "Company phone is required")
+                return
+            
+            if not output:
+                messagebox.showerror("Validation Error", "Output folder is required")
+                return
+            
+            # Create output folder if it doesn't exist
+            output_path = Path(output)
+            try:
+                output_path.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to create output folder: {e}")
+                return
+            
+            # Save to database
+            logo_value = logo if logo else None
+            success = self.db.save_company_settings(
+                name=name,
+                address=address,
+                phone=phone,
+                logo_path=logo_value,
+                currency=currency,
+                output_folder=output
+            )
+            
+            if success:
+                messagebox.showinfo("Success", "Company settings saved successfully!")
+                setup_window.destroy()
+                self.load_company_settings()
+                self.create_main_window()
+            else:
+                messagebox.showerror("Error", "Failed to save company settings")
+        
+        button_frame = ttk.Frame(setup_window)
+        button_frame.pack(pady=20)
+        
+        ttk.Button(
+            button_frame,
+            text="Save & Continue",
+            command=save_setup,
+            style="Accent.TButton"
+        ).pack()
+    
+    def create_main_window(self):
+        """Create the main invoice generation window."""
+        # Main container
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = tk.Label(
+            main_frame,
+            text="Create New Invoice",
+            font=("Helvetica", 18, "bold")
+        )
+        title_label.pack(pady=10)
+        
+        # Create notebook (tabs)
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Invoice tab
+        invoice_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(invoice_frame, text="Invoice Details")
+        
+        self.create_invoice_form(invoice_frame)
+        
+        # Action buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=10)
+        
+        ttk.Button(
+            button_frame,
+            text="Generate Invoice",
+            command=self.generate_invoice,
+            width=20
+        ).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(
+            button_frame,
+            text="Open Output Folder",
+            command=self.open_output_folder,
+            width=20
+        ).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(
+            button_frame,
+            text="Settings",
+            command=self.show_settings,
+            width=20
+        ).pack(side=tk.LEFT, padx=5)
+    
+    def create_invoice_form(self, parent: ttk.Frame):
+        """Create the invoice input form."""
+        # Create canvas with scrollbar
+        canvas = tk.Canvas(parent)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Billing Information Section
+        billing_section = ttk.LabelFrame(scrollable_frame, text="Billing Information", padding="10")
+        billing_section.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Billing Name
+        ttk.Label(billing_section, text="Customer Name:*").grid(
+            row=0, column=0, sticky=tk.W, pady=5
+        )
+        self.billing_name_entry = ttk.Entry(billing_section, width=50)
+        self.billing_name_entry.grid(row=0, column=1, pady=5, padx=5)
+        
+        # Billing Address
+        ttk.Label(billing_section, text="Billing Address:*").grid(
+            row=1, column=0, sticky=tk.NW, pady=5
+        )
+        self.billing_address_text = tk.Text(billing_section, width=50, height=4)
+        self.billing_address_text.grid(row=1, column=1, pady=5, padx=5)
+        
+        # Billing Phone
+        ttk.Label(billing_section, text="Phone Number:*").grid(
+            row=2, column=0, sticky=tk.W, pady=5
+        )
+        self.billing_phone_entry = ttk.Entry(billing_section, width=50)
+        self.billing_phone_entry.grid(row=2, column=1, pady=5, padx=5)
+        
+        # Invoice Details Section
+        details_section = ttk.LabelFrame(scrollable_frame, text="Invoice Details", padding="10")
+        details_section.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Currency
+        ttk.Label(details_section, text="Currency:").grid(
+            row=0, column=0, sticky=tk.W, pady=5
+        )
+        self.currency_var = tk.StringVar(value=self.company_settings['default_currency'])
+        currency_combo = ttk.Combobox(
+            details_section,
+            textvariable=self.currency_var,
+            values=utils.get_available_currencies(),
+            state="readonly",
+            width=47
+        )
+        currency_combo.grid(row=0, column=1, pady=5, padx=5)
+        
+        # Invoice Date
+        ttk.Label(details_section, text="Invoice Date:").grid(
+            row=1, column=0, sticky=tk.W, pady=5
+        )
+        self.date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
+        date_entry = ttk.Entry(details_section, textvariable=self.date_var, width=50)
+        date_entry.grid(row=1, column=1, pady=5, padx=5)
+        
+        # Tax Rate
+        ttk.Label(details_section, text="Tax Rate (%):").grid(
+            row=2, column=0, sticky=tk.W, pady=5
+        )
+        self.tax_rate_var = tk.StringVar(value="0")
+        tax_entry = ttk.Entry(details_section, textvariable=self.tax_rate_var, width=50)
+        tax_entry.grid(row=2, column=1, pady=5, padx=5)
+        
+        # Discount
+        ttk.Label(details_section, text="Discount Amount:").grid(
+            row=3, column=0, sticky=tk.W, pady=5
+        )
+        self.discount_var = tk.StringVar(value="0")
+        discount_entry = ttk.Entry(details_section, textvariable=self.discount_var, width=50)
+        discount_entry.grid(row=3, column=1, pady=5, padx=5)
+        
+        # Line Items Section
+        items_section = ttk.LabelFrame(scrollable_frame, text="Line Items", padding="10")
+        items_section.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Items header
+        items_header_frame = ttk.Frame(items_section)
+        items_header_frame.pack(fill=tk.X)
+        
+        ttk.Label(items_header_frame, text="Description", width=30).pack(side=tk.LEFT, padx=5)
+        ttk.Label(items_header_frame, text="Qty", width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Label(items_header_frame, text="Unit Price", width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Label(items_header_frame, text="Total", width=12).pack(side=tk.LEFT, padx=5)
+        
+        # Items container
+        self.items_container = ttk.Frame(items_section)
+        self.items_container.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # Add item button
+        ttk.Button(
+            items_section,
+            text="+ Add Item",
+            command=self.add_line_item
+        ).pack(pady=5)
+        
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Add initial line item
+        self.add_line_item()
+    
+    def add_line_item(self):
+        """Add a new line item row."""
+        item_frame = ttk.Frame(self.items_container)
+        item_frame.pack(fill=tk.X, pady=2)
+        
+        # Description
+        desc_entry = ttk.Entry(item_frame, width=30)
+        desc_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Quantity
+        qty_entry = ttk.Entry(item_frame, width=8)
+        qty_entry.insert(0, "1")
+        qty_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Unit Price
+        price_entry = ttk.Entry(item_frame, width=12)
+        price_entry.insert(0, "0.00")
+        price_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Total (calculated, read-only)
+        total_var = tk.StringVar(value="0.00")
+        total_label = ttk.Label(item_frame, textvariable=total_var, width=12)
+        total_label.pack(side=tk.LEFT, padx=5)
+        
+        # Auto-calculate total on quantity or price change
+        def update_total(*args):
+            try:
+                qty = int(qty_entry.get())
+                price = float(price_entry.get())
+                total = qty * price
+                total_var.set(f"{total:.2f}")
+            except ValueError:
+                total_var.set("0.00")
+        
+        qty_entry.bind("<KeyRelease>", update_total)
+        price_entry.bind("<KeyRelease>", update_total)
+        
+        # Remove button
+        def remove_item():
+            item_frame.destroy()
+            self.line_items.remove(item_data)
+        
+        remove_btn = ttk.Button(item_frame, text="Remove", command=remove_item, width=10)
+        remove_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Store item data
+        item_data = {
+            'frame': item_frame,
+            'description': desc_entry,
+            'quantity': qty_entry,
+            'unit_price': price_entry,
+            'total': total_var
+        }
+        self.line_items.append(item_data)
+    
+    def validate_invoice_form(self) -> tuple:
+        """
+        Validate the invoice form inputs.
+        
+        Returns:
+            Tuple of (is_valid: bool, error_message: str)
+        """
+        # Billing information
+        billing_name = self.billing_name_entry.get().strip()
+        if not billing_name:
+            return False, "Customer name is required"
+        
+        billing_address = self.billing_address_text.get("1.0", tk.END).strip()
+        if not billing_address:
+            return False, "Billing address is required"
+        
+        billing_phone = self.billing_phone_entry.get().strip()
+        valid, msg = utils.validate_phone(billing_phone)
+        if not valid:
+            return False, msg
+        
+        # Date
+        try:
+            datetime.strptime(self.date_var.get(), "%Y-%m-%d")
+        except ValueError:
+            return False, "Invalid date format (use YYYY-MM-DD)"
+        
+        # Tax rate
+        valid, msg = utils.validate_positive_number(self.tax_rate_var.get(), "Tax rate")
+        if not valid:
+            return False, msg
+        
+        # Discount
+        valid, msg = utils.validate_positive_number(self.discount_var.get(), "Discount")
+        if not valid:
+            return False, msg
+        
+        # Line items
+        if not self.line_items:
+            return False, "At least one line item is required"
+        
+        valid_items = 0
+        for item in self.line_items:
+            desc = item['description'].get().strip()
+            qty_str = item['quantity'].get().strip()
+            price_str = item['unit_price'].get().strip()
+            
+            if desc:  # Only validate items with description
+                valid, msg = utils.validate_quantity(qty_str)
+                if not valid:
+                    return False, f"Invalid quantity: {msg}"
+                
+                valid, msg = utils.validate_positive_number(price_str, "Unit price")
+                if not valid:
+                    return False, f"Invalid price: {msg}"
+                
+                valid_items += 1
+        
+        if valid_items == 0:
+            return False, "At least one line item with description is required"
+        
+        return True, ""
+    
+    def collect_invoice_data(self) -> tuple:
+        """
+        Collect and format invoice data from form.
+        
+        Returns:
+            Tuple of (invoice_data: dict, items: list)
+        """
+        # Parse date
+        invoice_date = datetime.strptime(self.date_var.get(), "%Y-%m-%d")
+        
+        # Generate order number
+        date_str = utils.get_date_string_for_sequence(invoice_date)
+        sequence = self.db.get_next_invoice_sequence(date_str)
+        order_number = utils.generate_order_number(invoice_date, sequence)
+        
+        # Collect invoice data
+        invoice_data = {
+            'order_number': order_number,
+            'invoice_date': invoice_date,
+            'billing_name': self.billing_name_entry.get().strip(),
+            'billing_address': self.billing_address_text.get("1.0", tk.END).strip(),
+            'billing_phone': self.billing_phone_entry.get().strip(),
+            'currency': self.currency_var.get(),
+            'tax_rate': float(self.tax_rate_var.get()),
+            'discount_amount': float(self.discount_var.get())
+        }
+        
+        # Collect line items (only those with description)
+        items = []
+        for item in self.line_items:
+            desc = item['description'].get().strip()
+            if desc:
+                items.append({
+                    'description': desc,
+                    'quantity': int(item['quantity'].get()),
+                    'unit_price': float(item['unit_price'].get())
+                })
+        
+        return invoice_data, items
+    
+    def generate_invoice(self):
+        """Generate and save the invoice PDF."""
+        # Validate form
+        valid, error_msg = self.validate_invoice_form()
+        if not valid:
+            messagebox.showerror("Validation Error", error_msg)
+            return
+        
+        # Collect data
+        invoice_data, items = self.collect_invoice_data()
+        
+        # Prepare company data
+        company_data = {
+            'company_name': self.company_settings['company_name'],
+            'company_address': self.company_settings['company_address'],
+            'company_phone': self.company_settings['company_phone'],
+            'logo_path': self.company_settings.get('logo_path')
+        }
+        
+        # Generate PDF path
+        output_folder = Path(self.company_settings['output_folder'])
+        pdf_filename = f"{invoice_data['order_number']}.pdf"
+        pdf_path = output_folder / pdf_filename
+        
+        # Ensure output folder exists
+        try:
+            output_folder.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create output folder: {e}")
+            return
+        
+        # Generate PDF
+        try:
+            success = pdf_generator.create_invoice_pdf(
+                str(pdf_path),
+                invoice_data,
+                company_data,
+                items
+            )
+            
+            if not success:
+                messagebox.showerror("Error", "Failed to generate PDF")
+                return
+        except Exception as e:
+            messagebox.showerror("Error", f"Error generating PDF: {e}")
+            return
+        
+        # Calculate totals for database
+        totals = utils.calculate_invoice_totals(
+            items,
+            invoice_data['tax_rate'],
+            invoice_data['discount_amount']
+        )
+        
+        # Save to database
+        success = self.db.save_invoice(
+            order_number=invoice_data['order_number'],
+            invoice_date=invoice_data['invoice_date'].strftime("%Y-%m-%d"),
+            billing_name=invoice_data['billing_name'],
+            billing_address=invoice_data['billing_address'],
+            billing_phone=invoice_data['billing_phone'],
+            currency=invoice_data['currency'],
+            subtotal=totals['subtotal'],
+            tax_amount=totals['tax_amount'],
+            discount_amount=totals['discount_amount'],
+            total=totals['total'],
+            pdf_path=str(pdf_path)
+        )
+        
+        if not success:
+            messagebox.showwarning(
+                "Warning",
+                "PDF generated but failed to save invoice record to database"
+            )
+        
+        # Show success message
+        message = (
+            f"Invoice generated successfully!\n\n"
+            f"Order Number: {invoice_data['order_number']}\n"
+            f"Total: {utils.format_currency(totals['total'], invoice_data['currency'])}\n"
+            f"Saved to: {pdf_path}"
+        )
+        messagebox.showinfo("Success", message)
+        
+        # Clear form for next invoice
+        self.clear_invoice_form()
+    
+    def clear_invoice_form(self):
+        """Clear the invoice form for a new invoice."""
+        # Clear billing fields
+        self.billing_name_entry.delete(0, tk.END)
+        self.billing_address_text.delete("1.0", tk.END)
+        self.billing_phone_entry.delete(0, tk.END)
+        
+        # Reset date to today
+        self.date_var.set(datetime.now().strftime("%Y-%m-%d"))
+        
+        # Reset tax and discount
+        self.tax_rate_var.set("0")
+        self.discount_var.set("0")
+        
+        # Clear line items
+        for item in self.line_items[:]:
+            item['frame'].destroy()
+        self.line_items.clear()
+        
+        # Add one empty line item
+        self.add_line_item()
+    
+    def open_output_folder(self):
+        """Open the invoice output folder in the system file explorer."""
+        output_folder = Path(self.company_settings['output_folder'])
+        
+        # Create folder if it doesn't exist
+        output_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Open folder based on platform
+        try:
+            if platform.system() == 'Darwin':  # macOS
+                subprocess.run(['open', str(output_folder)])
+            elif platform.system() == 'Windows':
+                subprocess.run(['explorer', str(output_folder)])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(output_folder)])
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open folder: {e}")
+    
+    def show_settings(self):
+        """Show the settings window to update company information."""
+        settings_window = tk.Toplevel(self.root)
+        settings_window.title("Settings")
+        settings_window.geometry("600x550")
+        settings_window.transient(self.root)
+        settings_window.grab_set()
+        
+        # Title
+        title_label = tk.Label(
+            settings_window,
+            text="Company Settings",
+            font=("Helvetica", 16, "bold")
+        )
+        title_label.pack(pady=20)
+        
+        # Form frame
+        form_frame = ttk.Frame(settings_window, padding="20")
+        form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Load current settings
+        settings = self.company_settings
+        
+        # Company Name
+        ttk.Label(form_frame, text="Company Name:*").grid(
+            row=0, column=0, sticky=tk.W, pady=5
+        )
+        name_entry = ttk.Entry(form_frame, width=40)
+        name_entry.insert(0, settings['company_name'])
+        name_entry.grid(row=0, column=1, pady=5, padx=5)
+        
+        # Company Address
+        ttk.Label(form_frame, text="Company Address:*").grid(
+            row=1, column=0, sticky=tk.NW, pady=5
+        )
+        address_text = tk.Text(form_frame, width=40, height=4)
+        address_text.insert("1.0", settings['company_address'])
+        address_text.grid(row=1, column=1, pady=5, padx=5)
+        
+        # Company Phone
+        ttk.Label(form_frame, text="Company Phone:*").grid(
+            row=2, column=0, sticky=tk.W, pady=5
+        )
+        phone_entry = ttk.Entry(form_frame, width=40)
+        phone_entry.insert(0, settings['company_phone'])
+        phone_entry.grid(row=2, column=1, pady=5, padx=5)
+        
+        # Default Currency
+        ttk.Label(form_frame, text="Default Currency:*").grid(
+            row=3, column=0, sticky=tk.W, pady=5
+        )
+        currency_var = tk.StringVar(value=settings['default_currency'])
+        currency_combo = ttk.Combobox(
+            form_frame,
+            textvariable=currency_var,
+            values=utils.get_available_currencies(),
+            state="readonly",
+            width=37
+        )
+        currency_combo.grid(row=3, column=1, pady=5, padx=5)
+        
+        # Logo Path
+        ttk.Label(form_frame, text="Company Logo:").grid(
+            row=4, column=0, sticky=tk.W, pady=5
+        )
+        logo_path_var = tk.StringVar(value=settings.get('logo_path') or "")
+        logo_frame = ttk.Frame(form_frame)
+        logo_frame.grid(row=4, column=1, pady=5, padx=5, sticky=tk.W)
+        
+        logo_entry = ttk.Entry(logo_frame, textvariable=logo_path_var, width=30)
+        logo_entry.pack(side=tk.LEFT)
+        
+        def choose_logo():
+            filename = filedialog.askopenfilename(
+                title="Select Company Logo",
+                filetypes=[
+                    ("Image Files", "*.png *.jpg *.jpeg"),
+                    ("All Files", "*.*")
+                ]
+            )
+            if filename:
+                logo_path_var.set(filename)
+        
+        ttk.Button(logo_frame, text="Browse...", command=choose_logo).pack(
+            side=tk.LEFT, padx=5
+        )
+        
+        # Output Folder
+        ttk.Label(form_frame, text="Invoice Output Folder:*").grid(
+            row=5, column=0, sticky=tk.W, pady=5
+        )
+        output_path_var = tk.StringVar(value=settings['output_folder'])
+        output_frame = ttk.Frame(form_frame)
+        output_frame.grid(row=5, column=1, pady=5, padx=5, sticky=tk.W)
+        
+        output_entry = ttk.Entry(output_frame, textvariable=output_path_var, width=30)
+        output_entry.pack(side=tk.LEFT)
+        
+        def choose_output_folder():
+            folder = filedialog.askdirectory(title="Select Output Folder")
+            if folder:
+                output_path_var.set(folder)
+        
+        ttk.Button(output_frame, text="Browse...", command=choose_output_folder).pack(
+            side=tk.LEFT, padx=5
+        )
+        
+        # Save button
+        def save_settings():
+            # Validate inputs
+            name = name_entry.get().strip()
+            address = address_text.get("1.0", tk.END).strip()
+            phone = phone_entry.get().strip()
+            currency = currency_var.get()
+            logo = logo_path_var.get().strip()
+            output = output_path_var.get().strip()
+            
+            if not name or not address or not phone or not output:
+                messagebox.showerror("Validation Error", "All required fields must be filled")
+                return
+            
+            # Create output folder if it doesn't exist
+            output_path = Path(output)
+            try:
+                output_path.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to create output folder: {e}")
+                return
+            
+            # Save to database
+            logo_value = logo if logo else None
+            success = self.db.save_company_settings(
+                name=name,
+                address=address,
+                phone=phone,
+                logo_path=logo_value,
+                currency=currency,
+                output_folder=output
+            )
+            
+            if success:
+                messagebox.showinfo("Success", "Settings updated successfully!")
+                self.load_company_settings()
+                settings_window.destroy()
+            else:
+                messagebox.showerror("Error", "Failed to save settings")
+        
+        button_frame = ttk.Frame(settings_window)
+        button_frame.pack(pady=20)
+        
+        ttk.Button(
+            button_frame,
+            text="Save Changes",
+            command=save_settings
+        ).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(
+            button_frame,
+            text="Cancel",
+            command=settings_window.destroy
+        ).pack(side=tk.LEFT, padx=5)
+    
+    def run(self):
+        """Start the application main loop."""
+        self.root.mainloop()
+    
+    def __del__(self):
+        """Cleanup: close database connection."""
+        if hasattr(self, 'db'):
+            self.db.close()
+
+
+def main():
+    """
+    Main entry point for the Invoice Generator application.
+    
+    Creates the Tkinter root window and starts the application.
+    """
+    # Create root window
+    root = tk.Tk()
+    
+    # Set window icon if available (optional)
+    # root.iconbitmap('icon.ico')  # Windows
+    # root.iconphoto(True, tk.PhotoImage(file='icon.png'))  # Unix/macOS
+    
+    # Create and run application
+    app = InvoiceGeneratorApp(root)
+    app.run()
+
+
+if __name__ == "__main__":
+    """
+    Run the application when the script is executed directly.
+    
+    Example:
+        python main.py
+    """
+    main()
