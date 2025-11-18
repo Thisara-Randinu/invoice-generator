@@ -149,6 +149,19 @@ class InvoiceGeneratorApp:
                        borderwidth=2, relief='solid')
         style.configure('Card.TLabelframe.Label', font=('Helvetica', 12, 'bold'),
                        foreground=self.colors['primary'], background=self.colors['bg_card'])
+        
+        # Configure modern Scrollbar
+        style.configure('Vertical.TScrollbar',
+                       gripcount=0,
+                       background=self.colors['border'],
+                       darkcolor=self.colors['bg_main'],
+                       lightcolor=self.colors['bg_main'],
+                       troughcolor=self.colors['bg_main'],
+                       bordercolor=self.colors['bg_main'],
+                       arrowcolor=self.colors['text_light'])
+        style.map('Vertical.TScrollbar',
+                 background=[('active', self.colors['text_light']), 
+                           ('!active', self.colors['border'])])
     
     def load_company_settings(self):
         """Load company settings from database."""
@@ -501,9 +514,9 @@ class InvoiceGeneratorApp:
         # Import modern components
         from modern_ui import ModernCard, ModernInput
         
-        # Canvas for scrolling
-        canvas = tk.Canvas(parent, bg=self.colors['bg_main'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        # Canvas for scrolling with mouse wheel support
+        canvas = tk.Canvas(parent, bg=self.colors['bg_main'], highlightthickness=0, bd=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview, style='Vertical.TScrollbar')
         scrollable_frame = tk.Frame(canvas, bg=self.colors['bg_main'])
         
         scrollable_frame.bind(
@@ -513,6 +526,27 @@ class InvoiceGeneratorApp:
         
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Enable mouse wheel scrolling (cross-platform)
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        def _on_mousewheel_linux(event):
+            if event.num == 4:
+                canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                canvas.yview_scroll(1, "units")
+        
+        # Bind mouse wheel events
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)  # Windows and macOS
+        canvas.bind_all("<Button-4>", _on_mousewheel_linux)  # Linux scroll up
+        canvas.bind_all("<Button-5>", _on_mousewheel_linux)  # Linux scroll down
+        
+        # Enable trackpad/touchpad gestures on macOS
+        def _on_trackpad_scroll(event):
+            canvas.yview_scroll(int(-1 * event.delta), "units")
+        
+        canvas.bind_all("<Shift-MouseWheel>", _on_trackpad_scroll)
         
         # === CUSTOMER INFORMATION CARD ===
         customer_card = ModernCard(
