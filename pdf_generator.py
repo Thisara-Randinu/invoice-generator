@@ -192,6 +192,15 @@ class InvoicePDF:
             True if PDF generated successfully, False otherwise.
         """
         try:
+            # Adjust layout based on number of items
+            num_items = len(items)
+            
+            # For 3 or fewer items, compress spacing to fit on one page
+            if num_items <= 3:
+                spacer_scale = 0.6  # Reduce spacing by 40%
+            else:
+                spacer_scale = 1.0  # Normal spacing, allow pagination
+            
             # Create document
             doc = SimpleDocTemplate(
                 self.filename,
@@ -207,19 +216,19 @@ class InvoicePDF:
             
             # Add decorative top border
             story.extend(self._build_decorative_header())
-            story.append(Spacer(1, 0.2 * inch))
+            story.append(Spacer(1, 0.2 * inch * spacer_scale))
             
             # Header section
             story.extend(self._build_header(company_data, invoice_data))
-            story.append(Spacer(1, 0.4 * inch))
+            story.append(Spacer(1, 0.4 * inch * spacer_scale))
             
             # Billing section
             story.extend(self._build_billing_section(invoice_data))
-            story.append(Spacer(1, 0.3 * inch))
+            story.append(Spacer(1, 0.3 * inch * spacer_scale))
             
-            # Items table
-            story.extend(self._build_items_table(items, invoice_data['currency']))
-            story.append(Spacer(1, 0.2 * inch))
+            # Items table - pass spacer_scale for internal adjustments
+            story.extend(self._build_items_table(items, invoice_data['currency'], spacer_scale))
+            story.append(Spacer(1, 0.2 * inch * spacer_scale))
             
             # Totals section
             story.extend(self._build_totals_section(
@@ -228,7 +237,7 @@ class InvoicePDF:
                 invoice_data.get('tax_rate', 0),
                 invoice_data.get('discount_amount', 0)
             ))
-            story.append(Spacer(1, 0.4 * inch))
+            story.append(Spacer(1, 0.3 * inch * spacer_scale))
             
             # Footer
             story.extend(self._build_footer())
@@ -400,8 +409,15 @@ class InvoicePDF:
         
         return elements
     
-    def _build_items_table(self, items: List[Dict], currency: str) -> List:
-        """Build the itemized table with descriptions, quantities, and prices."""
+    def _build_items_table(self, items: List[Dict], currency: str, spacer_scale: float = 1.0) -> List:
+        """
+        Build the itemized table with descriptions, quantities, and prices.
+        
+        Args:
+            items: List of line items
+            currency: Currency code
+            spacer_scale: Scale factor for row padding (0.6 for compact, 1.0 for normal)
+        """
         elements = []
         
         # Table headers
@@ -430,6 +446,12 @@ class InvoicePDF:
         
         items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
         
+        # Adjust padding based on number of items
+        row_top_padding = int(10 * spacer_scale)
+        row_bottom_padding = int(10 * spacer_scale)
+        header_top_padding = int(14 * spacer_scale)
+        header_bottom_padding = int(14 * spacer_scale)
+        
         # Enhanced table styling with gradient-like effect
         table_style = [
             # Header row - bold and colored
@@ -438,8 +460,8 @@ class InvoicePDF:
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 11),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 14),
-            ('TOPPADDING', (0, 0), (-1, 0), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), header_bottom_padding),
+            ('TOPPADDING', (0, 0), (-1, 0), header_top_padding),
             
             # Data rows
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
@@ -454,8 +476,8 @@ class InvoicePDF:
             ('LINEBELOW', (0, 0), (-1, 0), 2, self.color_secondary),
             ('INNERGRID', (0, 1), (-1, -1), 0.5, self.color_medium_gray),
             ('BOX', (0, 0), (-1, -1), 1.5, self.color_secondary),
-            ('TOPPADDING', (0, 1), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+            ('TOPPADDING', (0, 1), (-1, -1), row_top_padding),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), row_bottom_padding),
             ('LEFTPADDING', (0, 0), (-1, -1), 8),
             ('RIGHTPADDING', (0, 0), (-1, -1), 8),
         ]
