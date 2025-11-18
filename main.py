@@ -38,27 +38,32 @@ class InvoiceGeneratorApp:
         """
         self.root = root
         self.root.title("Invoice Generator Pro")
-        self.root.geometry("1000x750")
+        self.root.geometry("1400x900")
         
         # Set minimum size
-        self.root.minsize(900, 700)
+        self.root.minsize(1200, 800)
         
-        # Configure modern color scheme
+        # Ultra-modern color scheme with darker sidebar
         self.colors = {
-            'primary': '#6366f1',      # Indigo
-            'secondary': '#8b5cf6',    # Purple
-            'success': '#10b981',      # Green
-            'danger': '#ef4444',       # Red
-            'warning': '#f59e0b',      # Amber
-            'bg_main': '#f9fafb',      # Very light gray
-            'bg_card': '#ffffff',      # White
-            'text_dark': '#111827',    # Near black
-            'text_light': '#6b7280',   # Gray
-            'border': '#e5e7eb',       # Light gray
+            'primary': '#4F46E5',      # Indigo 600
+            'primary_hover': '#4338CA', # Indigo 700
+            'secondary': '#8B5CF6',    # Purple 500
+            'success': '#10B981',      # Emerald 500
+            'danger': '#EF4444',       # Red 500
+            'warning': '#F59E0B',      # Amber 500
+            'bg_main': '#F8FAFC',      # Slate 50
+            'bg_card': '#FFFFFF',      # White
+            'bg_sidebar': '#0F172A',   # Slate 900
+            'bg_sidebar_hover': '#1E293B', # Slate 800
+            'text_dark': '#0F172A',    # Slate 900
+            'text_light': '#64748B',   # Slate 500
+            'text_sidebar': '#94A3B8', # Slate 400
+            'border': '#E2E8F0',       # Slate 200
+            'shadow': '#64748B20',     # Slate 500 with opacity
         }
         
         # Configure root background
-        self.root.configure(bg=self.colors['bg_main'])
+        self.root.configure(bg=self.colors['bg_sidebar'])
         
         # Configure custom styles
         self._configure_styles()
@@ -327,75 +332,179 @@ class InvoiceGeneratorApp:
         ).pack()
     
     def create_main_window(self):
-        """Create the main invoice generation window with modern styling."""
-        # Main container with padding
-        main_container = ttk.Frame(self.root, style='TFrame')
-        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        """Create the main invoice generation window with ultra-modern sidebar layout."""
+        # Main container - full window
+        main_container = tk.Frame(self.root, bg=self.colors['bg_main'])
+        main_container.pack(fill=tk.BOTH, expand=True)
         
-        # Header section with title and company info
-        header_frame = ttk.Frame(main_container, style='TFrame')
-        header_frame.pack(fill=tk.X, pady=(0, 20))
+        # === SIDEBAR (LEFT) ===
+        sidebar = tk.Frame(main_container, bg=self.colors['bg_sidebar'], width=280)
+        sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        sidebar.pack_propagate(False)  # Fixed width
         
-        # Title and subtitle
-        title_label = ttk.Label(
-            header_frame,
-            text="📄 Create New Invoice",
-            style='Title.TLabel'
-        )
-        title_label.pack(anchor=tk.W)
+        # Logo/Brand section
+        brand_frame = tk.Frame(sidebar, bg=self.colors['bg_sidebar'])
+        brand_frame.pack(fill=tk.X, pady=30, padx=20)
         
-        subtitle_label = ttk.Label(
-            header_frame,
-            text=f"Company: {self.company_settings['company_name']}",
-            style='Subtitle.TLabel'
-        )
-        subtitle_label.pack(anchor=tk.W, pady=(5, 0))
+        tk.Label(
+            brand_frame,
+            text="📊",
+            font=('SF Pro Display', 32),
+            bg=self.colors['bg_sidebar'],
+            fg='white'
+        ).pack()
         
-        # Create form in scrollable canvas
-        self.create_invoice_form(main_container)
+        tk.Label(
+            brand_frame,
+            text="Invoice Pro",
+            font=('SF Pro Display', 18, 'bold'),
+            bg=self.colors['bg_sidebar'],
+            fg='white'
+        ).pack(pady=(10, 0))
         
-        # Action buttons at bottom - styled
-        button_frame = ttk.Frame(main_container, style='TFrame')
-        button_frame.pack(pady=20, fill=tk.X)
+        tk.Label(
+            brand_frame,
+            text=self.company_settings['company_name'][:20],
+            font=('SF Pro Display', 10),
+            bg=self.colors['bg_sidebar'],
+            fg=self.colors['text_sidebar']
+        ).pack(pady=(5, 0))
         
-        # Center the buttons
-        button_container = ttk.Frame(button_frame, style='TFrame')
-        button_container.pack(expand=True)
+        # Menu items
+        menu_frame = tk.Frame(sidebar, bg=self.colors['bg_sidebar'])
+        menu_frame.pack(fill=tk.BOTH, expand=True, pady=20)
         
-        ttk.Button(
+        # Active page indicator
+        self.active_page = tk.StringVar(value="invoice")
+        
+        # Menu buttons
+        menu_items = [
+            ("📄 New Invoice", "invoice", lambda: None),
+            ("⚙️ Settings", "settings", self.show_settings),
+            ("📁 Open Folder", "folder", self.open_output_folder),
+        ]
+        
+        for label, page_id, command in menu_items:
+            self.create_sidebar_button(menu_frame, label, page_id, command)
+        
+        # === CONTENT AREA (RIGHT) ===
+        content_area = tk.Frame(main_container, bg=self.colors['bg_main'])
+        content_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Header bar with gradient effect simulation
+        header_bar = tk.Frame(content_area, bg=self.colors['primary'], height=60)
+        header_bar.pack(fill=tk.X)
+        header_bar.pack_propagate(False)
+        
+        header_content = tk.Frame(header_bar, bg=self.colors['primary'])
+        header_content.pack(fill=tk.BOTH, expand=True, padx=40, pady=15)
+        
+        tk.Label(
+            header_content,
+            text="Create New Invoice",
+            font=('SF Pro Display', 20, 'bold'),
+            bg=self.colors['primary'],
+            fg='white'
+        ).pack(side=tk.LEFT)
+        
+        # Current date
+        current_date = datetime.now().strftime("%B %d, %Y")
+        tk.Label(
+            header_content,
+            text=f"📅 {current_date}",
+            font=('SF Pro Display', 11),
+            bg=self.colors['primary'],
+            fg='white'
+        ).pack(side=tk.RIGHT)
+        
+        # Scrollable form area
+        form_container = tk.Frame(content_area, bg=self.colors['bg_main'])
+        form_container.pack(fill=tk.BOTH, expand=True, padx=40, pady=30)
+        
+        # Create form
+        self.create_modern_invoice_form(form_container)
+        
+        # Action buttons at bottom
+        action_bar = tk.Frame(content_area, bg=self.colors['bg_main'])
+        action_bar.pack(fill=tk.X, padx=40, pady=(0, 30))
+        
+        # Import modern components
+        from modern_ui import ModernButton
+        
+        button_container = tk.Frame(action_bar, bg=self.colors['bg_main'])
+        button_container.pack()
+        
+        ModernButton(
             button_container,
             text="✓ Generate Invoice",
             command=self.generate_invoice,
-            style='Primary.TButton',
-            width=22
-        ).pack(side=tk.LEFT, padx=8)
+            style='primary'
+        ).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(
+        ModernButton(
             button_container,
-            text="📁 Open Invoices Folder",
-            command=self.open_output_folder,
-            style='TButton',
-            width=22
-        ).pack(side=tk.LEFT, padx=8)
-        
-        ttk.Button(
-            button_container,
-            text="⚙ Settings",
-            command=self.show_settings,
-            style='TButton',
-            width=15
-        ).pack(side=tk.LEFT, padx=8)
+            text="Clear Form",
+            command=self.clear_invoice_form,
+            style='secondary'
+        ).pack(side=tk.LEFT, padx=5)
     
-    def create_invoice_form(self, parent: ttk.Frame):
-        """Create the modern styled invoice input form."""
-        # Create canvas with scrollbar for scrolling
-        canvas_frame = ttk.Frame(parent, style='TFrame')
-        canvas_frame.pack(fill=tk.BOTH, expand=True)
+    def create_sidebar_button(self, parent, text, page_id, command):
+        """Create a styled sidebar button."""
+        def on_click():
+            self.active_page.set(page_id)
+            # Update all buttons
+            for widget in parent.winfo_children():
+                if isinstance(widget, tk.Label):
+                    if widget.cget('text') == text:
+                        widget.configure(
+                            bg=self.colors['primary'],
+                            fg='white'
+                        )
+                    else:
+                        widget.configure(
+                            bg=self.colors['bg_sidebar'],
+                            fg=self.colors['text_sidebar']
+                        )
+            if command:
+                command()
         
-        canvas = tk.Canvas(canvas_frame, bg=self.colors['bg_main'], 
-                          highlightthickness=0, bd=0)
-        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas, style='TFrame')
+        is_active = self.active_page.get() == page_id
+        
+        btn = tk.Label(
+            parent,
+            text=text,
+            font=('SF Pro Display', 12),
+            bg=self.colors['primary'] if is_active else self.colors['bg_sidebar'],
+            fg='white' if is_active else self.colors['text_sidebar'],
+            anchor='w',
+            padx=25,
+            pady=15,
+            cursor='hand2'
+        )
+        btn.pack(fill=tk.X, pady=2)
+        
+        # Hover effects
+        def on_enter(e):
+            if self.active_page.get() != page_id:
+                btn.configure(bg=self.colors['bg_sidebar_hover'], fg='white')
+        
+        def on_leave(e):
+            if self.active_page.get() != page_id:
+                btn.configure(bg=self.colors['bg_sidebar'], fg=self.colors['text_sidebar'])
+        
+        btn.bind('<Enter>', on_enter)
+        btn.bind('<Leave>', on_leave)
+        btn.bind('<Button-1>', lambda e: on_click())
+    
+    def create_modern_invoice_form(self, parent):
+        """Create the ultra-modern invoice form with cards."""
+        # Import modern components
+        from modern_ui import ModernCard, ModernInput
+        
+        # Canvas for scrolling
+        canvas = tk.Canvas(parent, bg=self.colors['bg_main'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=self.colors['bg_main'])
         
         scrollable_frame.bind(
             "<Configure>",
@@ -405,262 +514,302 @@ class InvoiceGeneratorApp:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        # === BILLING INFORMATION CARD ===
-        billing_card = ttk.LabelFrame(
-            scrollable_frame, 
-            text="  👤 Customer Information  ",
-            style='Card.TLabelframe',
-            padding="20"
+        # === CUSTOMER INFORMATION CARD ===
+        customer_card = ModernCard(
+            scrollable_frame,
+            title="Customer Information",
+            subtitle="Enter the billing details for this invoice"
         )
-        billing_card.pack(fill=tk.X, padx=5, pady=(0, 15))
+        customer_card.pack(fill=tk.X, pady=(0, 25))
         
-        # Customer Name with icon
-        name_frame = ttk.Frame(billing_card, style='Card.TFrame')
-        name_frame.pack(fill=tk.X, pady=8)
+        self.billing_name_input = ModernInput(
+            customer_card.content_frame,
+            label="Customer Name",
+            placeholder="John Doe",
+            required=True
+        )
+        self.billing_name_input.pack(fill=tk.X, pady=(0, 15))
         
-        ttk.Label(
-            name_frame, 
-            text="Customer Name *",
-            style='Header.TLabel',
-            background=self.colors['bg_card']
-        ).pack(anchor=tk.W, pady=(0, 5))
-        
-        self.billing_name_entry = ttk.Entry(name_frame, width=60, font=('Helvetica', 11))
-        self.billing_name_entry.pack(fill=tk.X, ipady=6)
-        
-        # Customer Address
-        address_frame = ttk.Frame(billing_card, style='Card.TFrame')
-        address_frame.pack(fill=tk.X, pady=8)
-        
-        ttk.Label(
-            address_frame,
+        # Address
+        tk.Label(
+            customer_card.content_frame,
             text="Billing Address *",
-            style='Header.TLabel',
-            background=self.colors['bg_card']
-        ).pack(anchor=tk.W, pady=(0, 5))
+            font=('SF Pro Display', 11, 'bold'),
+            bg='white',
+            fg='#0F172A',
+            anchor='w'
+        ).pack(fill=tk.X, pady=(0, 8))
         
         self.billing_address_text = tk.Text(
-            address_frame, 
-            width=60, 
-            height=4,
-            font=('Helvetica', 10),
+            customer_card.content_frame,
+            font=('SF Pro Display', 11),
             relief='solid',
             borderwidth=1,
-            padx=8,
-            pady=6
+            bg='white',
+            fg='#0F172A',
+            height=4
         )
-        self.billing_address_text.pack(fill=tk.X)
+        self.billing_address_text.pack(fill=tk.X, pady=(0, 15), ipady=12, ipadx=15)
         
-        # Phone Number
-        phone_frame = ttk.Frame(billing_card, style='Card.TFrame')
-        phone_frame.pack(fill=tk.X, pady=8)
-        
-        ttk.Label(
-            phone_frame,
-            text="Phone Number *",
-            style='Header.TLabel',
-            background=self.colors['bg_card']
-        ).pack(anchor=tk.W, pady=(0, 5))
-        
-        self.billing_phone_entry = ttk.Entry(phone_frame, width=60, font=('Helvetica', 11))
-        self.billing_phone_entry.pack(fill=tk.X, ipady=6)
+        self.billing_phone_input = ModernInput(
+            customer_card.content_frame,
+            label="Phone Number",
+            placeholder="+1 (555) 123-4567",
+            required=True
+        )
+        self.billing_phone_input.pack(fill=tk.X)
         
         # === INVOICE DETAILS CARD ===
-        details_card = ttk.LabelFrame(
+        details_card = ModernCard(
             scrollable_frame,
-            text="  📋 Invoice Details  ",
-            style='Card.TLabelframe',
-            padding="20"
+            title="Invoice Details",
+            subtitle="Configure invoice settings and pricing"
         )
-        details_card.pack(fill=tk.X, padx=5, pady=(0, 15))
+        details_card.pack(fill=tk.X, pady=(0, 25))
         
-        # Create 2-column layout for invoice details
-        details_left = ttk.Frame(details_card, style='Card.TFrame')
-        details_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        # Two-column layout
+        details_row1 = tk.Frame(details_card.content_frame, bg='white')
+        details_row1.pack(fill=tk.X, pady=(0, 15))
         
-        details_right = ttk.Frame(details_card, style='Card.TFrame')
-        details_right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        details_left = tk.Frame(details_row1, bg='white')
+        details_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 15))
         
-        # Currency (left column)
-        currency_frame = ttk.Frame(details_left, style='Card.TFrame')
-        currency_frame.pack(fill=tk.X, pady=8)
+        details_right = tk.Frame(details_row1, bg='white')
+        details_right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(15, 0))
         
-        ttk.Label(
-            currency_frame,
+        # Currency (left)
+        tk.Label(
+            details_left,
             text="Currency",
-            style='Header.TLabel',
-            background=self.colors['bg_card']
-        ).pack(anchor=tk.W, pady=(0, 5))
+            font=('SF Pro Display', 11, 'bold'),
+            bg='white',
+            fg='#0F172A',
+            anchor='w'
+        ).pack(fill=tk.X, pady=(0, 8))
         
         self.currency_var = tk.StringVar(value=self.company_settings['default_currency'])
         currency_combo = ttk.Combobox(
-            currency_frame,
+            details_left,
             textvariable=self.currency_var,
             values=utils.get_available_currencies(),
             state="readonly",
-            font=('Helvetica', 11)
+            font=('SF Pro Display', 11)
         )
-        currency_combo.pack(fill=tk.X, ipady=6)
+        currency_combo.pack(fill=tk.X, ipady=12)
         
-        # Invoice Date (right column)
-        date_frame = ttk.Frame(details_right, style='Card.TFrame')
-        date_frame.pack(fill=tk.X, pady=8)
-        
-        ttk.Label(
-            date_frame,
+        # Invoice Date (right)
+        tk.Label(
+            details_right,
             text="Invoice Date",
-            style='Header.TLabel',
-            background=self.colors['bg_card']
-        ).pack(anchor=tk.W, pady=(0, 5))
+            font=('SF Pro Display', 11, 'bold'),
+            bg='white',
+            fg='#0F172A',
+            anchor='w'
+        ).pack(fill=tk.X, pady=(0, 8))
         
         self.date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
-        date_entry = ttk.Entry(date_frame, textvariable=self.date_var, font=('Helvetica', 11))
-        date_entry.pack(fill=tk.X, ipady=6)
+        date_entry = tk.Entry(
+            details_right,
+            textvariable=self.date_var,
+            font=('SF Pro Display', 11),
+            relief='solid',
+            borderwidth=1,
+            bg='white',
+            fg='#0F172A'
+        )
+        date_entry.pack(fill=tk.X, ipady=12, ipadx=15)
         
-        # Tax Rate (left column)
-        tax_frame = ttk.Frame(details_left, style='Card.TFrame')
-        tax_frame.pack(fill=tk.X, pady=8)
+        # Tax and Discount row
+        details_row2 = tk.Frame(details_card.content_frame, bg='white')
+        details_row2.pack(fill=tk.X)
         
-        ttk.Label(
+        tax_frame = tk.Frame(details_row2, bg='white')
+        tax_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 15))
+        
+        discount_frame = tk.Frame(details_row2, bg='white')
+        discount_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(15, 0))
+        
+        # Tax Rate
+        tk.Label(
             tax_frame,
             text="Tax Rate (%)",
-            style='Header.TLabel',
-            background=self.colors['bg_card']
-        ).pack(anchor=tk.W, pady=(0, 5))
+            font=('SF Pro Display', 11, 'bold'),
+            bg='white',
+            fg='#0F172A',
+            anchor='w'
+        ).pack(fill=tk.X, pady=(0, 8))
         
         self.tax_rate_var = tk.StringVar(value="0")
-        tax_entry = ttk.Entry(tax_frame, textvariable=self.tax_rate_var, font=('Helvetica', 11))
-        tax_entry.pack(fill=tk.X, ipady=6)
+        tax_entry = tk.Entry(
+            tax_frame,
+            textvariable=self.tax_rate_var,
+            font=('SF Pro Display', 11),
+            relief='solid',
+            borderwidth=1,
+            bg='white',
+            fg='#0F172A'
+        )
+        tax_entry.pack(fill=tk.X, ipady=12, ipadx=15)
         
-        # Discount (right column)
-        discount_frame = ttk.Frame(details_right, style='Card.TFrame')
-        discount_frame.pack(fill=tk.X, pady=8)
-        
-        ttk.Label(
+        # Discount
+        tk.Label(
             discount_frame,
             text="Discount Amount",
-            style='Header.TLabel',
-            background=self.colors['bg_card']
-        ).pack(anchor=tk.W, pady=(0, 5))
+            font=('SF Pro Display', 11, 'bold'),
+            bg='white',
+            fg='#0F172A',
+            anchor='w'
+        ).pack(fill=tk.X, pady=(0, 8))
         
         self.discount_var = tk.StringVar(value="0")
-        discount_entry = ttk.Entry(discount_frame, textvariable=self.discount_var, font=('Helvetica', 11))
-        discount_entry.pack(fill=tk.X, ipady=6)
+        discount_entry = tk.Entry(
+            discount_frame,
+            textvariable=self.discount_var,
+            font=('SF Pro Display', 11),
+            relief='solid',
+            borderwidth=1,
+            bg='white',
+            fg='#0F172A'
+        )
+        discount_entry.pack(fill=tk.X, ipady=12, ipadx=15)
         
         # === LINE ITEMS CARD ===
-        items_card = ttk.LabelFrame(
+        items_card = ModernCard(
             scrollable_frame,
-            text="  🛒 Invoice Items  ",
-            style='Card.TLabelframe',
-            padding="20"
+            title="Invoice Items",
+            subtitle="Add products or services to this invoice"
         )
-        items_card.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 15))
+        items_card.pack(fill=tk.BOTH, expand=True, pady=(0, 25))
         
-        # Items header with styled labels
-        items_header_frame = ttk.Frame(items_card, style='Card.TFrame')
-        items_header_frame.pack(fill=tk.X, pady=(0, 10))
+        # Items header
+        items_header = tk.Frame(items_card.content_frame, bg='white')
+        items_header.pack(fill=tk.X, pady=(0, 15))
         
-        header_labels = [
-            ("Description", 40),
-            ("Qty", 8),
-            ("Unit Price", 12),
-            ("Total", 12),
-            ("", 10)  # Space for remove button
+        headers = [
+            ("Description", 350),
+            ("Qty", 80),
+            ("Unit Price", 120),
+            ("Total", 120),
+            ("", 100)
         ]
         
-        for label_text, width in header_labels:
-            ttk.Label(
-                items_header_frame,
-                text=label_text,
-                style='Header.TLabel',
-                background=self.colors['bg_card']
+        for text, width in headers:
+            tk.Label(
+                items_header,
+                text=text,
+                font=('SF Pro Display', 10, 'bold'),
+                bg='white',
+                fg='#64748B',
+                width=width // 8
             ).pack(side=tk.LEFT, padx=5)
         
-        # Items container with separator
-        separator = ttk.Frame(items_card, height=2, style='Card.TFrame')
-        separator.pack(fill=tk.X, pady=(0, 10))
-        
-        self.items_container = ttk.Frame(items_card, style='Card.TFrame')
+        # Items container
+        self.items_container = tk.Frame(items_card.content_frame, bg='white')
         self.items_container.pack(fill=tk.BOTH, expand=True)
         
-        # Add item button - styled
-        add_btn_frame = ttk.Frame(items_card, style='Card.TFrame')
+        # Add item button
+        from modern_ui import ModernButton
+        add_btn_frame = tk.Frame(items_card.content_frame, bg='white')
         add_btn_frame.pack(pady=(15, 0))
         
-        ttk.Button(
+        ModernButton(
             add_btn_frame,
-            text="+ Add Line Item",
-            command=self.add_line_item,
-            style='Success.TButton',
-            width=20
+            text="+ Add Item",
+            command=self.add_modern_line_item,
+            style='success'
         ).pack()
         
-        # Pack canvas and scrollbar
+        # Pack canvas
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Add initial line item
-        self.add_line_item()
+        # Add initial item
+        self.line_items = []
+        self.add_modern_line_item()
     
-    def add_line_item(self):
-        """Add a new styled line item row."""
-        item_frame = ttk.Frame(self.items_container, style='Card.TFrame')
-        item_frame.pack(fill=tk.X, pady=5)
+    def add_modern_line_item(self):
+        """Add a modern styled line item."""
+        item_frame = tk.Frame(self.items_container, bg='white')
+        item_frame.pack(fill=tk.X, pady=8)
         
-        # Description - wider and styled
-        desc_entry = ttk.Entry(item_frame, width=40, font=('Helvetica', 10))
-        desc_entry.pack(side=tk.LEFT, padx=5, ipady=4)
+        # Description
+        desc_entry = tk.Entry(
+            item_frame,
+            font=('SF Pro Display', 10),
+            relief='solid',
+            borderwidth=1,
+            bg='white',
+            fg='#0F172A',
+            width=45
+        )
+        desc_entry.pack(side=tk.LEFT, padx=5, ipady=8, ipadx=10)
         
-        # Quantity - smaller
-        qty_entry = ttk.Entry(item_frame, width=8, font=('Helvetica', 10))
+        # Quantity
+        qty_entry = tk.Entry(
+            item_frame,
+            font=('SF Pro Display', 10),
+            relief='solid',
+            borderwidth=1,
+            bg='white',
+            fg='#0F172A',
+            width=10
+        )
         qty_entry.insert(0, "1")
-        qty_entry.pack(side=tk.LEFT, padx=5, ipady=4)
+        qty_entry.pack(side=tk.LEFT, padx=5, ipady=8, ipadx=10)
         
         # Unit Price
-        price_entry = ttk.Entry(item_frame, width=12, font=('Helvetica', 10))
+        price_entry = tk.Entry(
+            item_frame,
+            font=('SF Pro Display', 10),
+            relief='solid',
+            borderwidth=1,
+            bg='white',
+            fg='#0F172A',
+            width=15
+        )
         price_entry.insert(0, "0.00")
-        price_entry.pack(side=tk.LEFT, padx=5, ipady=4)
+        price_entry.pack(side=tk.LEFT, padx=5, ipady=8, ipadx=10)
         
-        # Total (calculated, styled label)
+        # Total
         total_var = tk.StringVar(value="0.00")
-        total_label = ttk.Label(
-            item_frame, 
-            textvariable=total_var, 
-            width=12,
-            font=('Helvetica', 10, 'bold'),
-            foreground=self.colors['success'],
-            background=self.colors['bg_card']
+        total_label = tk.Label(
+            item_frame,
+            textvariable=total_var,
+            font=('SF Pro Display', 10, 'bold'),
+            bg='white',
+            fg='#10B981',
+            width=15,
+            anchor='w'
         )
         total_label.pack(side=tk.LEFT, padx=5)
         
-        # Auto-calculate total on quantity or price change
+        # Auto-calculate
         def update_total(*args):
             try:
                 qty = int(qty_entry.get())
                 price = float(price_entry.get())
                 total = qty * price
-                total_var.set(f"{total:.2f}")
+                total_var.set(f"${total:.2f}")
             except ValueError:
-                total_var.set("0.00")
+                total_var.set("$0.00")
         
         qty_entry.bind("<KeyRelease>", update_total)
         price_entry.bind("<KeyRelease>", update_total)
         
-        # Remove button - styled with danger color
+        # Remove button
         def remove_item():
             item_frame.destroy()
             self.line_items.remove(item_data)
         
-        remove_btn = ttk.Button(
-            item_frame, 
-            text="✕ Remove", 
-            command=remove_item, 
-            style='Danger.TButton',
-            width=10
-        )
-        remove_btn.pack(side=tk.LEFT, padx=5)
+        from modern_ui import ModernButton
+        ModernButton(
+            item_frame,
+            text="✕",
+            command=remove_item,
+            style='danger'
+        ).pack(side=tk.LEFT, padx=5)
         
-        # Store item data
+        # Store
         item_data = {
             'frame': item_frame,
             'description': desc_entry,
@@ -678,15 +827,17 @@ class InvoiceGeneratorApp:
             Tuple of (is_valid: bool, error_message: str)
         """
         # Billing information
-        billing_name = self.billing_name_entry.get().strip()
-        if not billing_name:
+        billing_name = self.billing_name_input.get().strip()
+        if not billing_name or billing_name in ["John Doe", ""]:
             return False, "Customer name is required"
         
         billing_address = self.billing_address_text.get("1.0", tk.END).strip()
         if not billing_address:
             return False, "Billing address is required"
         
-        billing_phone = self.billing_phone_entry.get().strip()
+        billing_phone = self.billing_phone_input.get().strip()
+        if billing_phone in ["+1 (555) 123-4567", ""]:
+            return False, "Phone number is required"
         valid, msg = utils.validate_phone(billing_phone)
         if not valid:
             return False, msg
@@ -752,9 +903,9 @@ class InvoiceGeneratorApp:
         invoice_data = {
             'order_number': order_number,
             'invoice_date': invoice_date,
-            'billing_name': self.billing_name_entry.get().strip(),
+            'billing_name': self.billing_name_input.get().strip(),
             'billing_address': self.billing_address_text.get("1.0", tk.END).strip(),
-            'billing_phone': self.billing_phone_entry.get().strip(),
+            'billing_phone': self.billing_phone_input.get().strip(),
             'currency': self.currency_var.get(),
             'tax_rate': float(self.tax_rate_var.get()),
             'discount_amount': float(self.discount_var.get())
@@ -1028,9 +1179,15 @@ class InvoiceGeneratorApp:
     def clear_invoice_form(self):
         """Clear the invoice form for a new invoice."""
         # Clear billing fields
-        self.billing_name_entry.delete(0, tk.END)
+        self.billing_name_input.delete(0, tk.END)
+        self.billing_name_input.insert(0, "John Doe")
+        self.billing_name_input.entry.configure(fg='#94A3B8')
+        
         self.billing_address_text.delete("1.0", tk.END)
-        self.billing_phone_entry.delete(0, tk.END)
+        
+        self.billing_phone_input.delete(0, tk.END)
+        self.billing_phone_input.insert(0, "+1 (555) 123-4567")
+        self.billing_phone_input.entry.configure(fg='#94A3B8')
         
         # Reset date to today
         self.date_var.set(datetime.now().strftime("%Y-%m-%d"))
@@ -1045,7 +1202,7 @@ class InvoiceGeneratorApp:
         self.line_items.clear()
         
         # Add one empty line item
-        self.add_line_item()
+        self.add_modern_line_item()
     
     def open_output_folder(self):
         """Open the invoice output folder in the system file explorer."""
